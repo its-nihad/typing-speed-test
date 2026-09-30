@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RapidType</title>
+<style>
+:root{
+  --bg:#e4e7ea;--panel:#f2f3f5;--line:#bfc5cc;--text:#1b1f24;--dim:#79828c;
+  --brass:#8c6a1c;--wrong:#b3372f;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#15171a;--panel:#1d2024;--line:#33383f;--text:#d9dde2;--dim:#6f7883;--brass:#c9a65a;--wrong:#e0685f}
+}
+:root[data-theme="dark"]{--bg:#15171a;--panel:#1d2024;--line:#33383f;--text:#d9dde2;--dim:#6f7883;--brass:#c9a65a;--wrong:#e0685f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);min-height:100vh;
+  font-family:"Avenir Next","Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+main{max-width:760px;margin:0 auto;padding:28px 20px 40px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{margin:0;font-size:1.35rem;font-weight:300;letter-spacing:.14em}
+h1 b{font-weight:700;color:var(--brass)}
+.modes{display:flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--panel)}
+.modes button{border:0;background:none;color:var(--dim);font:inherit;font-size:.9rem;padding:7px 16px;border-radius:999px;cursor:pointer}
+.modes button[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+button:focus-visible,.panel:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+
+.dial{position:relative;width:min(62vw,250px);aspect-ratio:1;margin:34px auto 26px}
+.dial svg{width:100%;height:100%;display:block}
+.tick{stroke:var(--line);stroke-width:1.5}
+.tick.m{stroke:var(--dim);stroke-width:2.5}
+.track{fill:none;stroke:var(--line);stroke-width:3}
+.arc{fill:none;stroke:var(--brass);stroke-width:5;stroke-linecap:round;transform:rotate(-90deg);transform-origin:120px 120px}
+.readout{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.time{font-size:clamp(2.6rem,12vw,3.6rem);font-weight:200;font-variant-numeric:tabular-nums;line-height:1}
+.live{margin-top:8px;font-size:.95rem;color:var(--dim);font-variant-numeric:tabular-nums}
+.live b{color:var(--text);font-weight:600}
+
+.panel{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;cursor:text;min-height:190px}
+.words{height:calc(3 * 2.3rem);overflow:hidden;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:1.35rem;line-height:2.3rem;white-space:pre-wrap;color:var(--dim);scroll-behavior:smooth;user-select:none}
+.words .ok{color:var(--text)}
+.words .bad{color:var(--wrong);background:color-mix(in srgb,var(--wrong) 20%,transparent);border-radius:3px}
+.words .cur{box-shadow:inset 2px 0 0 var(--brass)}
+.panel.idle .words{filter:blur(0)}
+.hint{margin:14px 0 0;font-size:.85rem;color:var(--dim)}
+#in{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+
+.result{display:none}
+.done .words,.done .hint{display:none}
+.done .result{display:block}
+.big{display:flex;align-items:baseline;gap:10px}
+.big span{font-size:4.2rem;font-weight:200;line-height:1;font-variant-numeric:tabular-nums}
+.big small{color:var(--dim);font-size:1rem}
+.stats{display:flex;flex-wrap:wrap;gap:8px 32px;margin:18px 0 6px}
+.stats div{min-width:88px}
+.stats dt{font-size:.82rem;color:var(--dim)}
+.stats dd{margin:2px 0 0;font-size:1.25rem;font-variant-numeric:tabular-nums}
+.best{color:var(--brass);font-size:.95rem;margin:12px 0 18px;min-height:1.2em}
+.again{border:1px solid var(--brass);background:none;color:var(--brass);font:inherit;padding:10px 22px;border-radius:999px;cursor:pointer}
+.again:hover{background:var(--brass);color:var(--bg)}
+@media (max-width:520px){.words{font-size:1.1rem;line-height:2rem;height:6rem}.panel{padding:16px}}
+@media (prefers-reduced-motion:reduce){.words{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>RAPID<b>TYPE</b></h1>
+    <div class="modes" role="group" aria-label="Test length">
+      <button type="button" data-d="15" aria-pressed="false">15s</button>
+      <button type="button" data-d="30" aria-pressed="true">30s</button>
+      <button type="button" data-d="60" aria-pressed="false">60s</button>
+    </div>
+  </header>
+
+  <div class="dial" aria-live="off">
+    <svg viewBox="0 0 240 240" aria-hidden="true">
+      <g id="ticks"></g>
+      <circle class="track" cx="120" cy="120" r="100"/>
+      <circle class="arc" id="arc" cx="120" cy="120" r="100" stroke-dasharray="628.32" stroke-dashoffset="0"/>
+    </svg>
+    <div class="readout">
+      <div class="time" id="time">30</div>
+      <div class="live"><b id="lw">0</b> wpm</div>
+    </div>
+  </div>
+
+  <section class="panel" id="panel" tabindex="0" aria-label="Typing area">
+    <div class="words" id="words"></div>
+    <p class="hint" id="hint">Start typing to begin. Press Tab to restart.</p>
+    <div class="result" id="result">
+      <div class="big"><span id="rw">0</span><small>words per minute</small></div>
+      <dl class="stats">
+        <div><dt>Accuracy</dt><dd id="ra">0%</dd></div>
+        <div><dt>Raw speed</dt><dd id="rr">0</dd></div>
+        <div><dt>Characters</dt><dd id="rc">0</dd></div>
+        <div><dt>Errors</dt><dd id="re">0</dd></div>
+      </dl>
+      <p class="best" id="best"></p>
+      <button type="button" class="again" id="again">New test</button>
+    </div>
+    <input id="in" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Type here">
+  </section>
+</main>
+
+<script>
+(function(){
+  var WORDS=("the be to of and a in that have it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us").split(" ");
+  var $=function(id){return document.getElementById(id)};
+  var wordsEl=$("words"),input=$("in"),panel=$("panel"),arc=$("arc"),C=628.32;
+  var dur=30,text="",spans=[],val="",running=false,done=false,t0=0,raf=0,keys=0,errs=0,lastWord="";
+
+  // dial ticks
+  var tk="";for(var i=0;i<60;i++){var m=i%5===0;tk+='<line class="tick'+(m?' m':'')+'" x1="120" y1="'+(m?6:10)+'" x2="120" y2="16" transform="rotate('+(i*6)+' 120 120)"/>'}
+  $("ticks").innerHTML=tk;
+
+  function rand(n){var w;do{w=WORDS[Math.floor(Math.random()*WORDS.length)]}while(w===lastWord);lastWord=w;return w}
+  function makeWords(n){var a=[];for(var i=0;i<n;i++)a.push(rand());return a.join(" ")}
+  function addText(s){
+    var start=text.length;text+=s;
+    for(var i=0;i<s.length;i++){var sp=document.createElement("span");sp.textContent=s[i];wordsEl.appendChild(sp);spans.push(sp)}
+    return start;
+  }
+  function reset(){
+    cancelAnimationFrame(raf);
+    running=done=false;val="";keys=errs=0;input.value="";input.disabled=false;
+    text="";spans=[];wordsEl.innerHTML="";wordsEl.scrollTop=0;lastWord="";
+    addText(makeWords(70));
+    panel.classList.remove("done");$("hint").style.display="";
+    $("time").textContent=dur;$("lw").textContent="0";arc.style.strokeDashoffset=0;
+    paint();input.focus({preventScroll:true});
+  }
+  function correctCount(){var c=0;for(var i=0;i<val.length;i++)if(val[i]===text[i])c++;return c}
+  function paint(){
+    for(var i=0;i<spans.length;i++){
+      var s=spans[i],c="";
+      if(i<val.length)c=val[i]===text[i]?"ok":"bad";
+      else if(i===val.length)c="cur";
+      if(s.className!==c)s.className=c;
+    }
+    var cur=spans[val.length];
+    if(cur)wordsEl.scrollTop=Math.max(0,cur.offsetTop-wordsEl.firstChild.offsetTop-parseFloat(getComputedStyle(wordsEl).lineHeight));
+  }
+  function tick(){
+    if(!running)return;
+    var el=(performance.now()-t0)/1000,rem=Math.max(0,dur-el);
+    arc.style.strokeDashoffset=C*(1-rem/dur);
+    $("time").textContent=Math.ceil(rem);
+    $("lw").textContent=el>=2?Math.round(correctCount()/5/(el/60)):0;
+    if(rem<=0)return finish();
+    raf=requestAnimationFrame(tick);
+  }
+  function finish(){
+    running=false;done=true;input.disabled=true;
+    var mins=dur/60,ok=correctCount(),wpm=Math.round(ok/5/mins),raw=Math.round(val.length/5/mins);
+    var acc=keys?Math.round((keys-errs)/keys*100):100;
+    $("time").textContent=0;arc.style.strokeDashoffset=C;$("lw").textContent=wpm;
+    $("rw").textContent=wpm;$("ra").textContent=acc+"%";$("rr").textContent=raw;
+    $("rc").textContent=ok+" / "+val.length;$("re").textContent=errs;
+    var msg="",key="rapidtype.best."+dur;
+    try{
+      var b=parseInt(localStorage.getItem(key),10);
+      if(isNaN(b)||wpm>b){if(wpm>0)localStorage.setItem(key,wpm);msg=wpm>0&&!isNaN(b)?"New best for "+dur+" seconds.":(wpm>0?"First result saved for "+dur+" seconds.":"")}
+      else msg="Best for "+dur+" seconds: "+b+" wpm.";
+    }catch(e){}
+    $("best").textContent=msg;
+    panel.classList.add("done");$("hint").style.display="none";
+    $("again").focus({preventScroll:true});
+  }
+
+  input.addEventListener("input",function(e){
+    if(done)return;
+    val=input.value;
+    if(!running&&val.length){running=true;t0=performance.now();raf=requestAnimationFrame(tick);$("hint").textContent="Keep going. Press Tab to restart."}
+    if(e.inputType==="insertText"&&e.data){
+      var idx=val.length-1;keys++;if(e.data!==text[idx])errs++;
+    }
+    if(val.length>text.length-60)addText(" "+makeWords(30));
+    paint();
+  });
+  input.addEventListener("paste",function(e){e.preventDefault()});
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Tab"&&(document.activeElement===input||document.activeElement===panel)){e.preventDefault();reset()}
+    else if(e.key==="Escape")reset();
+  });
+  panel.addEventListener("click",function(){if(!done)input.focus({preventScroll:true})});
+  panel.addEventListener("focus",function(){if(!done)input.focus({preventScroll:true})});
+  $("again").addEventListener("click",reset);
+  var btns=document.querySelectorAll(".modes button");
+  btns.forEach(function(b){b.addEventListener("click",function(){
+    dur=parseInt(b.dataset.d,10);
+    btns.forEach(function(x){x.setAttribute("aria-pressed",x===b?"true":"false")});
+    reset();
+  })});
+  reset();
+})();
+</script>
+</body>
+</html>
